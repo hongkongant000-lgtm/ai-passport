@@ -1,4 +1,4 @@
-// Tiny JSON string extractor for Google REST replies (host-testable, no deps).
+// Tiny JSON string extractor for xAI REST replies (host-testable, no deps).
 #pragma once
 
 #include <stdbool.h>

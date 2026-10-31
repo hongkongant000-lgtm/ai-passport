@@ -4,7 +4,7 @@
 #include "app_blufi.h"
 #include "app_cloud.h"
 #include "app_config.h"
-#include "app_google.h"
+#include "app_xai.h"
 #include "app_listen.h"
 #include "app_nav.h"
 #include "app_speaker.h"
@@ -132,7 +132,7 @@ static void render_home(void)
     const char *listen = app_listen_busy() ? "* 收音中..." : (s_nav.focus == 0 ? "* 开始收音" : "  开始收音");
     char body[512];
     snprintf(body, sizeof(body),
-             "%s\n%s\n%s\n%s\n\n原文: %.80s\n译文: %.80s\n%.40s\ncloud: %s",
+             "%s\n%s\n%s\n%s\n\n原文: %.80s\n译文: %.80s\n%.40s\nGrok: %s",
              listen,
              s_nav.focus == 1 ? "* 扬声器" : "  扬声器",
              s_nav.focus == 2 ? "* 存档" : "  存档",
@@ -140,7 +140,7 @@ static void render_home(void)
              s_source_line[0] ? s_source_line : "(无)",
              s_trans_line[0] ? s_trans_line : "(无)",
              s_status_note,
-             app_google_mode() == APP_GOOGLE_MODE_LIVE ? "LIVE" : "MOCK");
+             app_xai_mode() == APP_XAI_MODE_LIVE ? "LIVE" : "MOCK");
     lv_label_set_text(s_body, body);
     lv_label_set_text(s_hint, "UP/DOWN  OK  长按返回");
 }
@@ -206,7 +206,7 @@ static void render_settings(void)
     app_wifi_get_ip(ip, sizeof(ip));
     char body[360];
     snprintf(body, sizeof(body),
-             "%s %s\n%s 清除 Wi-Fi\n%s 语言: %s\n%s 云端: %s (%s)\n\nSSID: %s\nIP: %s\nBLE: %s",
+             "%s %s\n%s 清除 Wi-Fi\n%s 语言: %s\n%s Grok/xAI: %s (%s)\n\nSSID: %s\nIP: %s\nBLE: %s",
              s_nav.focus == 0 ? "*" : " ",
              app_blufi_is_active() ? "停止 BLUFI" : "启动 BLUFI",
              s_nav.focus == 1 ? "*" : " ",
@@ -214,7 +214,7 @@ static void render_settings(void)
              app_cloud_lang_label(),
              s_nav.focus == 3 ? "*" : " ",
              app_cloud_api_key_configured() ? "已配置" : "未配置",
-             app_google_mode() == APP_GOOGLE_MODE_LIVE ? "LIVE" : "MOCK",
+             app_xai_mode() == APP_XAI_MODE_LIVE ? "LIVE" : "MOCK",
              ssid[0] ? ssid : "(无)",
              ip[0] ? ip : "--",
              APP_DEVICE_NAME);
@@ -327,7 +327,7 @@ static void on_activate(void)
         } else if (s_nav.focus == 2) {
             app_cloud_cycle_lang_pair();
         } else if (s_nav.focus == 3) {
-            ESP_LOGI(TAG, "Google API key is %s (NVS only; never commit)",
+            ESP_LOGI(TAG, "xAI/Grok API key is %s (NVS cloud/xai_key; never commit)",
                      app_cloud_api_key_configured() ? "configured" : "missing");
         }
     }

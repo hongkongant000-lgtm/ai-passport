@@ -12,7 +12,7 @@ idf_component_register(
          "app_json.c"
          "app_store_names.c"
          "app_store.c"
-         "app_google.c"
+         "app_xai.c"
          "app_audio_mode.c"
          "app_listen.c"
          "app_speaker.c"

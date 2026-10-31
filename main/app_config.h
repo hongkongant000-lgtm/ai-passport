@@ -8,7 +8,8 @@
 
 // NVS namespaces / keys for runtime credentials (values written on device or via phone).
 #define APP_NVS_NS_CLOUD          "cloud"
-#define APP_NVS_KEY_GOOGLE_API    "gapi_key"   // Google API key string; empty = unset
+#define APP_NVS_KEY_XAI_API       "xai_key"    // xAI / Grok API key; empty = unset
+#define APP_NVS_KEY_LEGACY_GAPI   "gapi_key"   // legacy Google key name — ignored for live calls
 #define APP_NVS_NS_LANG           "lang"
 #define APP_NVS_KEY_SRC_LANG      "src"        // e.g. "zh-CN", "yue", "en", "auto"
 #define APP_NVS_KEY_DST_LANG      "dst"        // e.g. "en"
@@ -17,7 +18,6 @@
 #define APP_DEFAULT_DST_LANG      "en"
 
 // Custom Passport GATT (128-bit UUID base). Phone apps can discover/connect here.
-// 6b5c0001-7a3e-4f91-9c2d-1e8f0a4b6d70 and +1/+2 characteristics.
 #define APP_GATT_SVC_UUID128 \
     0x70, 0x6d, 0x4b, 0x0a, 0x8f, 0x1e, 0x2d, 0x9c, \
     0x91, 0x4f, 0x3e, 0x7a, 0x01, 0x00, 0x5c, 0x6b
@@ -40,8 +40,8 @@
 #define APP_STORE_MAX_ENTRIES     24
 #define APP_TEXT_MAX              160
 
-// Google endpoints (API key appended as query param; never logged).
-#define APP_GOOGLE_STT_URL \
-    "https://speech.googleapis.com/v1/speech:recognize"
-#define APP_GOOGLE_TRANSLATE_URL \
-    "https://translation.googleapis.com/language/translate/v2"
+// xAI / Grok HTTP APIs (Authorization: Bearer <key>; never log the key).
+#define APP_XAI_STT_URL           "https://api.x.ai/v1/stt"
+#define APP_XAI_CHAT_URL          "https://api.x.ai/v1/chat/completions"
+#define APP_XAI_STT_MODEL         "grok-voice-transcribe-2.0"
+#define APP_XAI_CHAT_MODEL        "grok-4-1-fast-non-reasoning"

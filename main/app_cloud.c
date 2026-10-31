@@ -14,7 +14,6 @@ typedef struct {
     const char *label;
 } lang_pair_t;
 
-// Labels stay ASCII until a CJK font subset is integrated.
 static const lang_pair_t s_pairs[] = {
     { "auto", "en", "auto -> EN" },
     { "zh-CN", "en", "ZH -> EN" },
@@ -42,7 +41,7 @@ esp_err_t app_cloud_init(void)
             break;
         }
     }
-    ESP_LOGI(TAG, "cloud config ready; api_key=%s lang=%s",
+    ESP_LOGI(TAG, "cloud config ready; xai_key=%s lang=%s",
              app_cloud_api_key_configured() ? "set" : "unset",
              s_pairs[s_pair_index].label);
     return ESP_OK;
@@ -53,7 +52,7 @@ bool app_cloud_api_key_configured(void)
     nvs_handle_t h;
     if (nvs_open(APP_NVS_NS_CLOUD, NVS_READONLY, &h) != ESP_OK) return false;
     size_t len = 0;
-    esp_err_t err = nvs_get_str(h, APP_NVS_KEY_GOOGLE_API, NULL, &len);
+    esp_err_t err = nvs_get_str(h, APP_NVS_KEY_XAI_API, NULL, &len);
     nvs_close(h);
     return err == ESP_OK && len > 1;
 }
@@ -64,11 +63,13 @@ esp_err_t app_cloud_set_api_key(const char *key)
     esp_err_t err = nvs_open(APP_NVS_NS_CLOUD, NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
     if (!key || key[0] == '\0') {
-        err = nvs_erase_key(h, APP_NVS_KEY_GOOGLE_API);
+        err = nvs_erase_key(h, APP_NVS_KEY_XAI_API);
         if (err == ESP_ERR_NVS_NOT_FOUND) err = ESP_OK;
     } else {
-        err = nvs_set_str(h, APP_NVS_KEY_GOOGLE_API, key);
+        err = nvs_set_str(h, APP_NVS_KEY_XAI_API, key);
     }
+    // Drop any leftover Google-era key so it cannot be mistaken for live config.
+    (void)nvs_erase_key(h, APP_NVS_KEY_LEGACY_GAPI);
     if (err == ESP_OK) err = nvs_commit(h);
     nvs_close(h);
     return err;

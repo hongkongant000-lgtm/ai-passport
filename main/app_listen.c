@@ -1,7 +1,7 @@
 #include "app_listen.h"
 #include "app_audio_mode.h"
 #include "app_config.h"
-#include "app_google.h"
+#include "app_xai.h"
 #include "app_store.h"
 
 #include "bsp_audio.h"
@@ -69,7 +69,7 @@ static void listen_task(void *arg)
     }
 
     bool stt_mock = false;
-    err = app_google_stt(pcm, got, source, sizeof(source), &stt_mock);
+    err = app_xai_stt(pcm, got, source, sizeof(source), &stt_mock);
     free(pcm);
     pcm = NULL;
     if (err != ESP_OK) {
@@ -78,7 +78,7 @@ static void listen_task(void *arg)
     }
 
     bool tr_mock = false;
-    err = app_google_translate(source, translation, sizeof(translation), &tr_mock);
+    err = app_xai_translate(source, translation, sizeof(translation), &tr_mock);
     mocked = stt_mock || tr_mock;
     if (err == ESP_OK) {
         (void)app_store_save(source, translation, NULL, 0);

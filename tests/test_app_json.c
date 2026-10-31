@@ -6,13 +6,13 @@ int main(void)
 {
     char out[64];
     const char *stt =
-        "{\"results\":[{\"alternatives\":[{\"transcript\":\"hello passport\",\"confidence\":0.9}]}]}";
-    assert(app_json_extract_string(stt, "transcript", out, sizeof(out)));
+        "{\"text\":\"hello passport\",\"language\":\"en\",\"duration\":0.75}";
+    assert(app_json_extract_string(stt, "text", out, sizeof(out)));
     assert(strcmp(out, "hello passport") == 0);
 
     const char *tr =
-        "{\"data\":{\"translations\":[{\"translatedText\":\"ni hao\",\"detectedSourceLanguage\":\"en\"}]}}";
-    assert(app_json_extract_string(tr, "translatedText", out, sizeof(out)));
+        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"ni hao\"}}]}";
+    assert(app_json_extract_string(tr, "content", out, sizeof(out)));
     assert(strcmp(out, "ni hao") == 0);
 
     assert(app_json_extract_string("{\"a\":\"x\\\"y\"}", "a", out, sizeof(out)));
