@@ -123,12 +123,12 @@ python3 tools/archive_firmware.py verify <archive-directory>
 
 ```bash
 cc -std=c11 -Wall -Wextra -Werror -Imain \
-  tests/test_ui_pixel_math.c main/ui_pixel_math.c \
-  -o /tmp/test_ui_pixel_math
-/tmp/test_ui_pixel_math
+  tests/test_app_nav.c main/app_nav.c \
+  -o /tmp/test_app_nav
+/tmp/test_app_nav
 ```
 
-静态门禁还将真实 BSP 和 demo 实现与轻量平台桩编译在一起，故障注入覆盖任务退出交接与停止重试、录音失败、Wi-Fi/BLE 启动回滚、按键分配与 ADC 错误、LVGL 初始化锁与重试、codec 打开/休眠/唤醒恢复。只需主机 C 编译器和 Python，不依赖 ESP-IDF 或已下载的 Managed Components。这些测试不代表真实时序、电气行为或设备兼容性；固件门禁会使用锁定依赖进行编译。
+静态门禁还将真实 BSP 实现与轻量平台桩编译在一起，故障注入覆盖按键分配与 ADC 错误、LVGL 初始化锁与重试、codec 打开/休眠/唤醒恢复，以及应用导航纯逻辑。只需主机 C 编译器和 Python，不依赖 ESP-IDF 或已下载的 Managed Components。这些测试不代表真实时序、电气行为或设备兼容性；固件门禁会使用锁定依赖进行编译。
 
 统一验证入口：
 
