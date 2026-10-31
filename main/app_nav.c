@@ -11,14 +11,25 @@ static int page_count(const app_nav_t *nav)
     }
 }
 
+static void clamp_focus(app_nav_t *nav)
+{
+    int count = page_count(nav);
+    if (count <= 0) {
+        nav->focus = 0;
+        return;
+    }
+    if (nav->focus < 0) nav->focus = count - 1;
+    if (nav->focus >= count) nav->focus = 0;
+}
+
 void app_nav_init(app_nav_t *nav)
 {
     nav->page = APP_PAGE_HOME;
     nav->focus = 0;
     // Home: Listen, Speaker, Archive, Settings
     nav->home_count = 4;
-    // Speaker: Volume down, Volume up
-    nav->speaker_count = 2;
+    // Speaker: Start/stop stream, Volume down, Volume up
+    nav->speaker_count = 3;
     // Archive: list placeholder (empty → one "empty" slot)
     nav->archive_count = 1;
     // Settings: Provision Wi-Fi, Clear Wi-Fi, Language, Cloud status
@@ -30,15 +41,20 @@ int app_nav_focus_count(const app_nav_t *nav)
     return page_count(nav);
 }
 
-static void clamp_focus(app_nav_t *nav)
+void app_nav_set_archive_count(app_nav_t *nav, int count)
 {
-    int count = page_count(nav);
-    if (count <= 0) {
-        nav->focus = 0;
-        return;
-    }
-    if (nav->focus < 0) nav->focus = count - 1;
-    if (nav->focus >= count) nav->focus = 0;
+    if (!nav) return;
+    if (count < 1) count = 1; // keep one empty/placeholder slot
+    nav->archive_count = count;
+    if (nav->page == APP_PAGE_ARCHIVE) clamp_focus(nav);
+}
+
+void app_nav_set_speaker_count(app_nav_t *nav, int count)
+{
+    if (!nav) return;
+    if (count < 1) count = 1;
+    nav->speaker_count = count;
+    if (nav->page == APP_PAGE_SPEAKER) clamp_focus(nav);
 }
 
 app_nav_result_t app_nav_handle(app_nav_t *nav, app_nav_input_t input)

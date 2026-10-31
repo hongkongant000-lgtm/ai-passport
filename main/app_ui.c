@@ -4,15 +4,17 @@
 #include "app_blufi.h"
 #include "app_cloud.h"
 #include "app_config.h"
+#include "app_google.h"
+#include "app_listen.h"
 #include "app_nav.h"
-#include "app_power.h"
+#include "app_speaker.h"
+#include "app_store.h"
 #include "app_wifi.h"
 
 #include "bsp_battery.h"
 #include "bsp_display.h"
 
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -22,7 +24,6 @@
 
 static const char *TAG = "app_ui";
 
-// Visual language: deep ink field, chalk text, amber focus — distinct from ui_pixel.
 #define COL_BG       0x0B1C24
 #define COL_PANEL    0x122B36
 #define COL_INK      0xE7F0F4
@@ -49,15 +50,31 @@ static lv_obj_t *s_title;
 static lv_obj_t *s_body;
 static lv_obj_t *s_hint;
 static lv_timer_t *s_timer;
-static bool s_listening;
-static char s_source_line[96];
-static char s_trans_line[96];
-static int s_volume = 60;
+static char s_source_line[APP_TEXT_MAX];
+static char s_trans_line[APP_TEXT_MAX];
+static char s_status_note[48];
+static app_store_entry_t s_archive[APP_STORE_MAX_ENTRIES];
+static int s_archive_n;
+static bool s_archive_open;
+static char s_open_name[24];
+static volatile bool s_ui_dirty;
+
+static const lv_font_t *font_ui(void)
+{
+    // Built-in CJK subset for Chinese chrome + Latin. Device check still required.
+    return &lv_font_source_han_sans_sc_16_cjk;
+}
 
 static void style_label(lv_obj_t *obj, const lv_font_t *font, uint32_t color)
 {
     lv_obj_set_style_text_font(obj, font, 0);
     lv_obj_set_style_text_color(obj, lv_color_hex(color), 0);
+}
+
+static void refresh_archive_list(void)
+{
+    s_archive_n = app_store_list(s_archive, APP_STORE_MAX_ENTRIES);
+    app_nav_set_archive_count(&s_nav, s_archive_n > 0 ? s_archive_n : 1);
 }
 
 static const char *ble_label(void)
@@ -96,14 +113,12 @@ static const char *wifi_label(void)
 static void refresh_chrome(void)
 {
     int soc = bsp_battery_soc();
-    if (soc < 0) {
-        lv_label_set_text(s_battery, "");
-    } else {
-        lv_label_set_text_fmt(s_battery, "%d%%", soc);
-    }
+    if (soc < 0) lv_label_set_text(s_battery, "");
+    else lv_label_set_text_fmt(s_battery, "%d%%", soc);
     lv_label_set_text(s_ble_badge, ble_label());
     lv_label_set_text(s_wifi_badge, wifi_label());
-    uint32_t ble_color = (app_ble_is_connected() || app_blufi_state() == APP_BLUFI_BLE_CONNECTED ||
+    uint32_t ble_color = (app_ble_is_connected() ||
+                          app_blufi_state() == APP_BLUFI_BLE_CONNECTED ||
                           app_blufi_state() == APP_BLUFI_WIFI_CONNECTED)
                              ? COL_OK : COL_MUTED;
     uint32_t wifi_color = app_wifi_got_ip() ? COL_OK : COL_MUTED;
@@ -113,65 +128,98 @@ static void refresh_chrome(void)
 
 static void render_home(void)
 {
-    lv_label_set_text(s_title, "Listen & Translate");
-    char body[256];
+    lv_label_set_text(s_title, "Listen");
+    const char *listen = app_listen_busy() ? "* 收音中..." : (s_nav.focus == 0 ? "* 开始收音" : "  开始收音");
+    char body[512];
     snprintf(body, sizeof(body),
-             "%s\n%s\n%s\n%s\n\nSRC: %s\nTR:  %s",
-             s_nav.focus == 0 ? (s_listening ? "* Stop listen" : "* Start listen")
-                              : (s_listening ? "  Stop listen" : "  Start listen"),
-             s_nav.focus == 1 ? "* Speaker" : "  Speaker",
-             s_nav.focus == 2 ? "* Archive" : "  Archive",
-             s_nav.focus == 3 ? "* Settings" : "  Settings",
-             s_source_line[0] ? s_source_line : "(none yet)",
-             s_trans_line[0] ? s_trans_line : "(none yet)");
+             "%s\n%s\n%s\n%s\n\n原文: %.80s\n译文: %.80s\n%.40s\ncloud: %s",
+             listen,
+             s_nav.focus == 1 ? "* 扬声器" : "  扬声器",
+             s_nav.focus == 2 ? "* 存档" : "  存档",
+             s_nav.focus == 3 ? "* 设置" : "  设置",
+             s_source_line[0] ? s_source_line : "(无)",
+             s_trans_line[0] ? s_trans_line : "(无)",
+             s_status_note,
+             app_google_mode() == APP_GOOGLE_MODE_LIVE ? "LIVE" : "MOCK");
     lv_label_set_text(s_body, body);
-    lv_label_set_text(s_hint, "UP/DOWN  OK open  hold OK back");
+    lv_label_set_text(s_hint, "UP/DOWN  OK  长按返回");
 }
 
 static void render_speaker(void)
 {
-    lv_label_set_text(s_title, "Speaker");
-    char body[160];
+    lv_label_set_text(s_title, "扬声器");
+    char ip[16] = { 0 };
+    app_wifi_get_ip(ip, sizeof(ip));
+    char body[288];
     snprintf(body, sizeof(body),
-             "Wi-Fi audio stream\n(from phone)\n\n%s Volume -\n%s Volume +  (%d%%)\n\n%s",
+             "%s %s\n%s 音量 - (%u%%)\n%s 音量 +\n\nTCP %s:%u\n头: PASSPORT + PCM16\n%s",
              s_nav.focus == 0 ? "*" : " ",
+             app_speaker_running() ? "停止接收" : "开始接收",
              s_nav.focus == 1 ? "*" : " ",
-             s_volume,
-             "Playback stub — milestone 1");
+             (unsigned)app_speaker_volume(),
+             s_nav.focus == 2 ? "*" : " ",
+             ip[0] ? ip : "--",
+             (unsigned)app_speaker_port(),
+             app_speaker_playing() ? "播放中" : (app_speaker_running() ? "等待手机..." : "已停止"));
     lv_label_set_text(s_body, body);
-    lv_label_set_text(s_hint, "hold OK = home");
+    lv_label_set_text(s_hint, "长按 OK = 主页");
 }
 
 static void render_archive(void)
 {
-    lv_label_set_text(s_title, "Archive");
-    lv_label_set_text(s_body,
-                      "* (empty)\n\nTranscript save\ncomes in a later\nmilestone.\n\nSPIFFS partition\nready: /store");
-    lv_label_set_text(s_hint, "hold OK = home");
+    lv_label_set_text(s_title, "存档");
+    if (s_archive_open) {
+        char src[APP_TEXT_MAX] = { 0 };
+        char tr[APP_TEXT_MAX] = { 0 };
+        (void)app_store_read(s_open_name, src, sizeof(src), tr, sizeof(tr));
+        char body[480];
+        snprintf(body, sizeof(body),
+                 "%s\n\n原文:\n%.120s\n\n译文:\n%.120s\n\nOK=删除  长按=返回",
+                 s_open_name, src[0] ? src : "(空)", tr[0] ? tr : "(空)");
+        lv_label_set_text(s_body, body);
+        lv_label_set_text(s_hint, "OK 删除");
+        return;
+    }
+    if (s_archive_n <= 0) {
+        lv_label_set_text(s_body, "* (空)\n\n收音成功后会写入 Flash。");
+        lv_label_set_text(s_hint, "长按 OK = 主页");
+        return;
+    }
+    char body[360];
+    size_t o = 0;
+    body[0] = '\0';
+    int start = s_nav.focus > 2 ? s_nav.focus - 2 : 0;
+    for (int i = start; i < s_archive_n && o + 40 < sizeof(body); i++) {
+        o += (size_t)snprintf(body + o, sizeof(body) - o, "%s %s\n",
+                              i == s_nav.focus ? "*" : " ", s_archive[i].name);
+    }
+    lv_label_set_text(s_body, body);
+    lv_label_set_text(s_hint, "OK 打开  长按返回");
 }
 
 static void render_settings(void)
 {
-    lv_label_set_text(s_title, "Settings");
+    lv_label_set_text(s_title, "设置");
     char ssid[33] = { 0 };
     char ip[16] = { 0 };
     app_wifi_get_ssid(ssid, sizeof(ssid));
     app_wifi_get_ip(ip, sizeof(ip));
-    char body[320];
+    char body[360];
     snprintf(body, sizeof(body),
-             "%s %s\n%s Clear Wi-Fi\n%s Lang: %s\n%s Cloud: %s\n\nSSID: %s\nIP: %s\nBLE: %s",
+             "%s %s\n%s 清除 Wi-Fi\n%s 语言: %s\n%s 云端: %s (%s)\n\nSSID: %s\nIP: %s\nBLE: %s",
              s_nav.focus == 0 ? "*" : " ",
-             app_blufi_is_active() ? "Stop BLUFI" : "Start BLUFI",
+             app_blufi_is_active() ? "停止 BLUFI" : "启动 BLUFI",
              s_nav.focus == 1 ? "*" : " ",
              s_nav.focus == 2 ? "*" : " ",
              app_cloud_lang_label(),
              s_nav.focus == 3 ? "*" : " ",
-             app_cloud_api_key_configured() ? "key set" : "key unset",
-             ssid[0] ? ssid : "(none)",
+             app_cloud_api_key_configured() ? "已配置" : "未配置",
+             app_google_mode() == APP_GOOGLE_MODE_LIVE ? "LIVE" : "MOCK",
+             ssid[0] ? ssid : "(无)",
              ip[0] ? ip : "--",
              APP_DEVICE_NAME);
     lv_label_set_text(s_body, body);
-    lv_label_set_text(s_hint, "OK act  hold OK home");
+    lv_label_set_text(s_hint, "OK 执行  长按返回");
 }
 
 static void render_page(void)
@@ -186,31 +234,89 @@ static void render_page(void)
     }
 }
 
+static void on_listen_done(const char *source, const char *translation,
+                           bool mocked, esp_err_t err, void *user)
+{
+    (void)user;
+    if (err == ESP_OK) {
+        snprintf(s_source_line, sizeof(s_source_line), "%s", source ? source : "");
+        snprintf(s_trans_line, sizeof(s_trans_line), "%s", translation ? translation : "");
+        snprintf(s_status_note, sizeof(s_status_note), "%s", mocked ? "已保存 (MOCK)" : "已保存");
+        refresh_archive_list();
+        app_ble_set_status_text("idle");
+    } else {
+        snprintf(s_status_note, sizeof(s_status_note), "收音失败");
+        app_ble_set_status_text("err");
+    }
+    s_ui_dirty = true;
+}
+
 static void on_activate(void)
 {
     if (s_nav.page == APP_PAGE_HOME && s_nav.focus == 0) {
-        s_listening = !s_listening;
-        if (s_listening) {
-            strncpy(s_source_line, "[listening...]", sizeof(s_source_line) - 1);
-            strncpy(s_trans_line, "(STT later)", sizeof(s_trans_line) - 1);
-            app_ble_set_status_text("listen");
-        } else {
-            strncpy(s_source_line, "(stopped)", sizeof(s_source_line) - 1);
+        if (app_listen_busy()) {
+            app_listen_cancel();
+            snprintf(s_status_note, sizeof(s_status_note), "取消中...");
+            return;
+        }
+        if (app_speaker_running()) {
+            snprintf(s_status_note, sizeof(s_status_note), "请先停扬声器");
+            return;
+        }
+        snprintf(s_source_line, sizeof(s_source_line), "...");
+        snprintf(s_trans_line, sizeof(s_trans_line), "...");
+        snprintf(s_status_note, sizeof(s_status_note), "录音中...");
+        app_ble_set_status_text("listen");
+        esp_err_t err = app_listen_start(on_listen_done, NULL);
+        if (err != ESP_OK) {
+            snprintf(s_status_note, sizeof(s_status_note), "无法开始: %s", esp_err_to_name(err));
             app_ble_set_status_text("idle");
         }
         return;
     }
+
     if (s_nav.page == APP_PAGE_SPEAKER) {
-        if (s_nav.focus == 0 && s_volume >= 10) s_volume -= 10;
-        if (s_nav.focus == 1 && s_volume <= 90) s_volume += 10;
+        if (s_nav.focus == 0) {
+            if (app_speaker_running()) {
+                app_speaker_stop();
+            } else {
+                esp_err_t err = app_speaker_start();
+                if (err != ESP_OK) {
+                    ESP_LOGW(TAG, "speaker start: %s", esp_err_to_name(err));
+                }
+            }
+        } else if (s_nav.focus == 1) {
+            uint8_t v = app_speaker_volume();
+            app_speaker_set_volume(v >= 10 ? (uint8_t)(v - 10) : 0);
+        } else if (s_nav.focus == 2) {
+            uint8_t v = app_speaker_volume();
+            app_speaker_set_volume(v <= 90 ? (uint8_t)(v + 10) : 100);
+        }
         return;
     }
+
+    if (s_nav.page == APP_PAGE_ARCHIVE) {
+        if (s_archive_open) {
+            (void)app_store_delete(s_open_name);
+            s_archive_open = false;
+            s_open_name[0] = '\0';
+            refresh_archive_list();
+            return;
+        }
+        if (s_archive_n > 0 && s_nav.focus >= 0 && s_nav.focus < s_archive_n) {
+            snprintf(s_open_name, sizeof(s_open_name), "%s", s_archive[s_nav.focus].name);
+            s_archive_open = true;
+        }
+        return;
+    }
+
     if (s_nav.page == APP_PAGE_SETTINGS) {
         if (s_nav.focus == 0) {
             if (app_blufi_is_active()) {
                 app_blufi_stop();
                 (void)app_ble_start();
             } else {
+                if (app_speaker_running()) app_speaker_stop();
                 esp_err_t err = app_blufi_start();
                 if (err != ESP_OK) {
                     ESP_LOGE(TAG, "BLUFI start: %s", esp_err_to_name(err));
@@ -221,8 +327,7 @@ static void on_activate(void)
         } else if (s_nav.focus == 2) {
             app_cloud_cycle_lang_pair();
         } else if (s_nav.focus == 3) {
-            // Placeholder: show status only. Keys are written via NVS / phone later.
-            ESP_LOGI(TAG, "Google API key is %s (set via NVS, never commit)",
+            ESP_LOGI(TAG, "Google API key is %s (NVS only; never commit)",
                      app_cloud_api_key_configured() ? "configured" : "missing");
         }
     }
@@ -240,9 +345,29 @@ static void process_input(const input_event_t *input)
     }
     if (nav_input == APP_NAV_INPUT_OTHER) return;
 
+    if (nav_input == APP_NAV_INPUT_BACK && s_nav.page == APP_PAGE_ARCHIVE && s_archive_open) {
+        s_archive_open = false;
+        if (!bsp_lvgl_lock(200)) return;
+        render_page();
+        bsp_lvgl_unlock();
+        return;
+    }
+
+    if (nav_input == APP_NAV_INPUT_BACK ||
+        (nav_input != APP_NAV_INPUT_OK && s_nav.page == APP_PAGE_ARCHIVE && !s_archive_open)) {
+        // entering archive refreshes list
+    }
+    if (s_nav.page == APP_PAGE_HOME && nav_input == APP_NAV_INPUT_OK && s_nav.focus == 2) {
+        refresh_archive_list();
+    }
+
     app_nav_result_t result = app_nav_handle(&s_nav, nav_input);
+    if (result.action == APP_NAV_ACTION_ENTER_PAGE && result.page == APP_PAGE_ARCHIVE) {
+        s_archive_open = false;
+        refresh_archive_list();
+    }
     if (result.action == APP_NAV_ACTION_ACTIVATE) on_activate();
-    if (result.action == APP_NAV_ACTION_NONE) return;
+    if (result.action == APP_NAV_ACTION_NONE && nav_input != APP_NAV_INPUT_OK) return;
 
     if (!bsp_lvgl_lock(200)) return;
     render_page();
@@ -263,14 +388,13 @@ static void input_task(void *arg)
 static void tick(lv_timer_t *timer)
 {
     (void)timer;
-    refresh_chrome();
-    // Keep settings page live while provisioning.
-    if (s_nav.page == APP_PAGE_SETTINGS || s_nav.page == APP_PAGE_HOME) {
-        render_page();
+    if (s_ui_dirty) {
+        s_ui_dirty = false;
     }
-    if (app_wifi_got_ip() && app_blufi_is_active() &&
-        app_blufi_state() == APP_BLUFI_WIFI_CONNECTING) {
-        // State will flip via wifi callbacks; UI refresh is enough.
+    refresh_chrome();
+    if (s_nav.page == APP_PAGE_SETTINGS || s_nav.page == APP_PAGE_HOME ||
+        s_nav.page == APP_PAGE_SPEAKER || s_ui_dirty) {
+        render_page();
     }
 }
 
@@ -292,30 +416,30 @@ static void build_shell(void)
     lv_obj_set_style_pad_all(top, 0, 0);
 
     s_brand = lv_label_create(top);
-    style_label(s_brand, &lv_font_montserrat_14, COL_ACCENT);
+    style_label(s_brand, font_ui(), COL_ACCENT);
     lv_label_set_text(s_brand, "PASSPORT");
-    lv_obj_set_pos(s_brand, 8, 10);
+    lv_obj_set_pos(s_brand, 8, 8);
 
     s_battery = lv_label_create(top);
-    style_label(s_battery, &lv_font_montserrat_14, COL_INK);
-    lv_obj_align(s_battery, LV_ALIGN_TOP_RIGHT, -8, 10);
+    style_label(s_battery, font_ui(), COL_INK);
+    lv_obj_align(s_battery, LV_ALIGN_TOP_RIGHT, -8, 8);
 
     s_ble_badge = lv_label_create(s_scr);
-    style_label(s_ble_badge, &lv_font_montserrat_14, COL_MUTED);
-    lv_obj_set_pos(s_ble_badge, 8, 44);
+    style_label(s_ble_badge, font_ui(), COL_MUTED);
+    lv_obj_set_pos(s_ble_badge, 8, 42);
 
     s_wifi_badge = lv_label_create(s_scr);
-    style_label(s_wifi_badge, &lv_font_montserrat_14, COL_MUTED);
-    lv_obj_set_pos(s_wifi_badge, 100, 44);
+    style_label(s_wifi_badge, font_ui(), COL_MUTED);
+    lv_obj_set_pos(s_wifi_badge, 100, 42);
 
     s_title = lv_label_create(s_scr);
-    style_label(s_title, &lv_font_montserrat_20, COL_INK);
-    lv_obj_set_pos(s_title, 8, 68);
+    style_label(s_title, font_ui(), COL_INK);
+    lv_obj_set_pos(s_title, 8, 64);
     lv_obj_set_width(s_title, 224);
 
     lv_obj_t *panel = lv_obj_create(s_scr);
-    lv_obj_set_size(panel, 224, 178);
-    lv_obj_set_pos(panel, 8, 100);
+    lv_obj_set_size(panel, 224, 186);
+    lv_obj_set_pos(panel, 8, 92);
     lv_obj_set_style_bg_color(panel, lv_color_hex(COL_PANEL), 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(panel, 2, 0);
@@ -325,21 +449,22 @@ static void build_shell(void)
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
     s_body = lv_label_create(panel);
-    style_label(s_body, &lv_font_montserrat_14, COL_INK);
+    style_label(s_body, font_ui(), COL_INK);
     lv_obj_set_width(s_body, 200);
     lv_label_set_long_mode(s_body, LV_LABEL_LONG_WRAP);
 
     s_hint = lv_label_create(s_scr);
-    style_label(s_hint, &lv_font_montserrat_14, COL_MUTED);
-    lv_obj_set_pos(s_hint, 8, 288);
+    style_label(s_hint, font_ui(), COL_MUTED);
+    lv_obj_set_pos(s_hint, 8, 286);
     lv_obj_set_width(s_hint, 224);
 
-    strncpy(s_source_line, "", sizeof(s_source_line));
-    strncpy(s_trans_line, "", sizeof(s_trans_line));
+    s_source_line[0] = s_trans_line[0] = s_status_note[0] = '\0';
     app_nav_init(&s_nav);
+    app_nav_set_speaker_count(&s_nav, 3);
+    refresh_archive_list();
     render_page();
     lv_screen_load(s_scr);
-    s_timer = lv_timer_create(tick, 500, NULL);
+    s_timer = lv_timer_create(tick, 400, NULL);
 }
 
 esp_err_t app_ui_start(void)

@@ -40,5 +40,10 @@ int main(void)
     r = app_nav_handle(&nav, APP_NAV_INPUT_UP);
     assert(nav.focus == 3);
 
+    app_nav_set_archive_count(&nav, 5);
+    assert(nav.archive_count == 5);
+    app_nav_set_speaker_count(&nav, 3);
+    assert(nav.speaker_count == 3);
+
     return 0;
 }

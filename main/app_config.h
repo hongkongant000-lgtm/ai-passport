@@ -31,3 +31,17 @@
 // SPIFFS mount for saved transcripts (partition label must match partitions.csv).
 #define APP_STORAGE_PARTITION     "storage"
 #define APP_STORAGE_BASE_PATH     "/store"
+
+// Audio / cloud budgets (no PSRAM — keep clips short).
+#define APP_AUDIO_HZ              16000
+#define APP_LISTEN_MS             750
+#define APP_LISTEN_MAX_SAMPLES    ((APP_AUDIO_HZ * APP_LISTEN_MS) / 1000)
+#define APP_SPEAKER_TCP_PORT      9090
+#define APP_STORE_MAX_ENTRIES     24
+#define APP_TEXT_MAX              160
+
+// Google endpoints (API key appended as query param; never logged).
+#define APP_GOOGLE_STT_URL \
+    "https://speech.googleapis.com/v1/speech:recognize"
+#define APP_GOOGLE_TRANSLATE_URL \
+    "https://translation.googleapis.com/language/translate/v2"

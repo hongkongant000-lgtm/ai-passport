@@ -46,3 +46,5 @@ typedef struct {
 void app_nav_init(app_nav_t *nav);
 app_nav_result_t app_nav_handle(app_nav_t *nav, app_nav_input_t input);
 int app_nav_focus_count(const app_nav_t *nav);
+void app_nav_set_archive_count(app_nav_t *nav, int count);
+void app_nav_set_speaker_count(app_nav_t *nav, int count);

@@ -2,6 +2,7 @@
 #include "app_ble.h"
 #include "app_cloud.h"
 #include "app_config.h"
+#include "app_store.h"
 #include "app_ui.h"
 #include "app_wifi.h"
 #include "key_guard.h"
@@ -58,6 +59,7 @@ static void storage_init(void)
             ESP_LOGI(TAG, "storage %s: %u / %u bytes", APP_STORAGE_BASE_PATH,
                      (unsigned)used, (unsigned)total);
         }
+        (void)app_store_init();
     }
 }
 

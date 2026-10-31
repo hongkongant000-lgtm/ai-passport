@@ -29,6 +29,14 @@ run_static_checks() {
         -o "${test_dir}/test_app_nav"
     "${test_dir}/test_app_nav"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_json.c main/app_json.c \
+        -o "${test_dir}/test_app_json"
+    "${test_dir}/test_app_json"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
+        tests/test_app_store_names.c main/app_store_names.c \
+        -o "${test_dir}/test_app_store_names"
+    "${test_dir}/test_app_store_names"
+    "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Imain \
         tests/test_key_guard.c -o "${test_dir}/test_key_guard"
     "${test_dir}/test_key_guard"
     "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -Icomponents/bsp/src \

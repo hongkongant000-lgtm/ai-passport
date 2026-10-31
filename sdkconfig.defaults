@@ -24,9 +24,12 @@ CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_DEF_REFR_PERIOD=20
 CONFIG_LV_FONT_MONTSERRAT_14=y
 CONFIG_LV_FONT_MONTSERRAT_20=y
+# Built-in CJK subset for Chinese chrome / transcript display (still verify on device).
+CONFIG_LV_FONT_SOURCE_HAN_SANS_SC_16_CJK=y
+CONFIG_LV_TXT_ENC_UTF8=y
 # LVGL 内置 malloc 池大小(KB)。独立静态区、不与系统堆共享。
-# Translator shell needs a bit more than the baseline demo menu.
-CONFIG_LV_MEM_SIZE_KILOBYTES=32
+# Translator shell + CJK labels need a bit more headroom.
+CONFIG_LV_MEM_SIZE_KILOBYTES=40
 
 # --- 系统 ---
 CONFIG_FREERTOS_HZ=1000
@@ -46,3 +49,8 @@ CONFIG_BT_NIMBLE_NVS_PERSIST=n
 # BLUFI official security negotiation uses DHM + AES + MD5.
 CONFIG_MBEDTLS_HARDWARE_MPI=n
 CONFIG_MBEDTLS_DHM_C=y
+
+# HTTPS to Google APIs (common CA bundle — smaller than FULL).
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN=y
+
