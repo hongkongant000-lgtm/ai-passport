@@ -15,6 +15,10 @@
 - 添加字库前评估 Flash 与内部 RAM 影响；ESP32-C3 无 PSRAM。
 - 不提交许可不允许分发的字库。
 
+| 文件 | 尺寸与格式 | 用途与来源 |
+| --- | --- | --- |
+| [`fonts/meihua_font_16.c`](fonts/meihua_font_16.c) | 16 px，4 bpp，LVGL C（约 120 KB） | 梅花易数界面子集。源：Adobe Source Han Sans SC Regular（SIL OFL 1.1）。转换：`lv_font_conv` 1.5.3，`--no-compress`，字符为提问/结果文案、卦名、ASCII 可打印字符与常用中文标点。由 `main/CMakeLists.txt` 链接为 `meihua_font_16`。 |
+
 ## 图片（images）
 
 可复用的源图与生成的显示资产放在 `images/`。
