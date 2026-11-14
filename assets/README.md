@@ -17,6 +17,10 @@ Store reusable font files and generated font sources in `fonts/`.
 - Check Flash and internal-RAM impact before adding a font; the ESP32-C3 has no PSRAM.
 - Do not commit fonts whose license does not permit redistribution.
 
+| File | Size / format | Use and source |
+| --- | --- | --- |
+| [`fonts/meihua_font_16.c`](fonts/meihua_font_16.c) | 16 px, 4 bpp, LVGL C (~120 KB) | Mei Hua Yi Shu UI subset. Source: Adobe Source Han Sans SC Regular (SIL OFL 1.1). Converter: `lv_font_conv` 1.5.3, `--no-compress`, symbols = ask/result UI strings + trigram names + ASCII printable + common CJK punctuation. Linked from `main/CMakeLists.txt` as `meihua_font_16`. |
+
 ## Images
 
 Store reusable source images and generated display assets in `images/`.
